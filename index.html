@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyse Régression - Maurice</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css" />
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    <style>
+        .py-loading { display: none; }
+        body { background-color: #f8fafc; color: #1e293b; font-family: sans-serif; }
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+        #plot-output img { width: 100%; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="bg-white p-6 rounded-xl shadow-sm mb-6 flex justify-between items-center border-l-8 border-blue-800">
+            <div>
+                <h1 class="text-2xl font-bold">Régression Linéaire Avancée : AAPL</h1>
+                <p class="text-sm text-slate-500">Période : 252 jours (1 an) | Format Ultra-Large 25x8</p>
+            </div>
+            <div id="status" class="bg-blue-100 text-blue-800 px-4 py-2 rounded-full font-bold animate-pulse text-sm">
+                Chargement de l'Analyse...
+            </div>
+        </div>
+
+        <div id="plot-output" class="bg-white p-4 rounded-xl shadow-inner min-h-[500px] flex items-center justify-center italic text-slate-400">
+            Préparation du moteur statistique...
+        </div>
+    </div>
+
+<py-config>
+    packages = ["yfinance", "pandas", "numpy", "matplotlib", "scikit-learn"]
+</py-config>
+
+<py-script>
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+from js import document
+
+def run_regression():
+    try:
+        # 1. Collecte des Données (AAPL - 1 an)
+        ticker = "AAPL"
+        data = yf.download(ticker, period="1y")
+        
+        # Gestion des en-têtes doubles yfinance
+        if isinstance(data.columns, pd.MultiIndex):
+            df = data['Close'][ticker].to_frame()
+        else:
+            df = data['Close'].to_frame()
+        
+        df = df.dropna().tail(252)
+        y = df.values.flatten().astype(float)
+        X = np.arange(len(y)).reshape(-1, 1)
+
+        # 2. Paramètres Statistiques
+        model = LinearRegression()
+        model.fit(X, y)
+        y_pred = model.predict(X)
+        
+        # Calcul de l'erreur type pour les canaux
+        std_error = np.std(y - y_pred)
+
+        # 3. Graphique Ultra-Large (25, 8)
+        fig, ax = plt.subplots(figsize=(25, 8), facecolor='white')
+        
+        # Courbe des prix bleu foncé
+        ax.plot(df.index, y, color='#00008B', linewidth=2, label=f'Prix {ticker}')
+        
+        # Ligne centrale noire et canaux
+        ax.plot(df.index, y_pred, color='black', linewidth=1.5, label='Tendance Centrale')
+        
+        # Limites et Shading (Zones de couleurs)
+        ax.plot(df.index, y_pred + 2*std_error, color='red', linestyle='--', alpha=0.6, label='+2 Std Dev')
+        ax.plot(df.index, y_pred + 1*std_error, color='orange', linestyle='--', alpha=0.6)
+        ax.plot(df.index, y_pred - 1*std_error, color='blue', linestyle='--', alpha=0.6)
+        ax.plot(df.index, y_pred - 2*std_error, color='green', linestyle='--', alpha=0.6)
+        
+        ax.fill_between(df.index, y_pred - 2*std_error, y_pred + 2*std_error, color='gray', alpha=0.05)
+
+        # Point Final et Étiquette
+        last_price = float(y[-1])
+        ax.scatter(df.index[-1], last_price, color='red', s=100, zorder=5)
+        ax.annotate(f"Dernier: {last_price:.2f} $", 
+                    xy=(df.index[-1], last_price),
+                    xytext=(15, 0), textcoords='offset points',
+                    bbox=dict(boxstyle='round,pad=0.5', fc='white', ec='red', lw=2),
+                    fontsize=12, fontweight='bold', color='black')
+
+        ax.set_title(f"ANALYSE DE RÉGRESSION LINÉAIRE - {ticker}", fontsize=18, fontweight='bold', pad=20)
+        ax.grid(True, alpha=0.2)
+        ax.legend(loc='upper left')
+
+        # Affichage
+        document.getElementById("status").innerHTML = "ANALYSE TERMINÉE"
+        document.getElementById("status").classList.remove("animate-pulse")
+        document.getElementById("plot-output").innerHTML = ""
+        display(fig, target="plot-output")
+
+    except Exception as e:
+        document.getElementById("status").innerHTML = "ERREUR"
+        document.getElementById("plot-output").innerHTML = f"Erreur technique : {str(e)}"
+
+run_regression()
+</py-script>
+</body>
+</html>
