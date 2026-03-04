@@ -1,113 +1,270 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analyse Régression - Maurice</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css" />
-    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-    <style>
-        .py-loading { display: none; }
-        body { background-color: #f8fafc; color: #1e293b; font-family: sans-serif; }
-        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
-        #plot-output img { width: 100%; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
-    </style>
+  <meta charset="UTF-8">
+  <title>Régression linéaire AAPL sur 1 an</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #stats { margin-top: 20px; }
+    table { border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 4px 8px; font-size: 12px; }
+    th { background: #f0f0f0; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <div class="bg-white p-6 rounded-xl shadow-sm mb-6 flex justify-between items-center border-l-8 border-blue-800">
-            <div>
-                <h1 class="text-2xl font-bold">Régression Linéaire Avancée : AAPL</h1>
-                <p class="text-sm text-slate-500">Période : 252 jours (1 an) | Format Ultra-Large 25x8</p>
-            </div>
-            <div id="status" class="bg-blue-100 text-blue-800 px-4 py-2 rounded-full font-bold animate-pulse text-sm">
-                Chargement de l'Analyse...
-            </div>
-        </div>
+<h2>Graphique de régression linéaire – AAPL (252 jours)</h2>
+<canvas id="chart" width="1200" height="500"></canvas>
 
-        <div id="plot-output" class="bg-white p-4 rounded-xl shadow-inner min-h-[500px] flex items-center justify-center italic text-slate-400">
-            Préparation du moteur statistique...
-        </div>
-    </div>
+<div id="stats"></div>
 
-<py-config>
-    packages = ["yfinance", "pandas", "numpy", "matplotlib", "scikit-learn"]
-</py-config>
+<script>
+// ---------- PARAMÈTRES ----------
+const ticker = "AAPL";
+const nbJours = 252;
 
-<py-script>
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
-from js import document
+// ---------- FONCTIONS UTILITAIRES ----------
+function mean(arr) {
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
 
-def run_regression():
-    try:
-        # 1. Collecte des Données (AAPL - 1 an)
-        ticker = "AAPL"
-        data = yf.download(ticker, period="1y")
-        
-        # Gestion des en-têtes doubles yfinance
-        if isinstance(data.columns, pd.MultiIndex):
-            df = data['Close'][ticker].to_frame()
-        else:
-            df = data['Close'].to_frame()
-        
-        df = df.dropna().tail(252)
-        y = df.values.flatten().astype(float)
-        X = np.arange(len(y)).reshape(-1, 1)
+function stdDev(arr) {
+  const m = mean(arr);
+  const variance = arr.reduce((s, x) => s + Math.pow(x - m, 2), 0) / (arr.length - 1);
+  return Math.sqrt(variance);
+}
 
-        # 2. Paramètres Statistiques
-        model = LinearRegression()
-        model.fit(X, y)
-        y_pred = model.predict(X)
-        
-        # Calcul de l'erreur type pour les canaux
-        std_error = np.std(y - y_pred)
+// Régression linéaire y = a*x + b
+function linearRegression(xs, ys) {
+  const n = xs.length;
+  const meanX = mean(xs);
+  const meanY = mean(ys);
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (xs[i] - meanX) * (ys[i] - meanY);
+    den += Math.pow(xs[i] - meanX, 2);
+  }
+  const a = num / den;           // pente
+  const b = meanY - a * meanX;   // ordonnée à l’origine
 
-        # 3. Graphique Ultra-Large (25, 8)
-        fig, ax = plt.subplots(figsize=(25, 8), facecolor='white')
-        
-        # Courbe des prix bleu foncé
-        ax.plot(df.index, y, color='#00008B', linewidth=2, label=f'Prix {ticker}')
-        
-        # Ligne centrale noire et canaux
-        ax.plot(df.index, y_pred, color='black', linewidth=1.5, label='Tendance Centrale')
-        
-        # Limites et Shading (Zones de couleurs)
-        ax.plot(df.index, y_pred + 2*std_error, color='red', linestyle='--', alpha=0.6, label='+2 Std Dev')
-        ax.plot(df.index, y_pred + 1*std_error, color='orange', linestyle='--', alpha=0.6)
-        ax.plot(df.index, y_pred - 1*std_error, color='blue', linestyle='--', alpha=0.6)
-        ax.plot(df.index, y_pred - 2*std_error, color='green', linestyle='--', alpha=0.6)
-        
-        ax.fill_between(df.index, y_pred - 2*std_error, y_pred + 2*std_error, color='gray', alpha=0.05)
+  // Erreur type de la régression (résidus)
+  let seNum = 0;
+  for (let i = 0; i < n; i++) {
+    const yHat = a * xs[i] + b;
+    seNum += Math.pow(ys[i] - yHat, 2);
+  }
+  const se = Math.sqrt(seNum / (n - 2));
 
-        # Point Final et Étiquette
-        last_price = float(y[-1])
-        ax.scatter(df.index[-1], last_price, color='red', s=100, zorder=5)
-        ax.annotate(f"Dernier: {last_price:.2f} $", 
-                    xy=(df.index[-1], last_price),
-                    xytext=(15, 0), textcoords='offset points',
-                    bbox=dict(boxstyle='round,pad=0.5', fc='white', ec='red', lw=2),
-                    fontsize=12, fontweight='bold', color='black')
+  return { a, b, se };
+}
 
-        ax.set_title(f"ANALYSE DE RÉGRESSION LINÉAIRE - {ticker}", fontsize=18, fontweight='bold', pad=20)
-        ax.grid(True, alpha=0.2)
-        ax.legend(loc='upper left')
+// ---------- RÉCUPÉRATION DES DONNÉES YAHOO FINANCE ----------
+async function fetchAAPL() {
+  const now = Math.floor(Date.now() / 1000);
+  const unAnAvant = now - 365 * 24 * 60 * 60;
 
-        # Affichage
-        document.getElementById("status").innerHTML = "ANALYSE TERMINÉE"
-        document.getElementById("status").classList.remove("animate-pulse")
-        document.getElementById("plot-output").innerHTML = ""
-        display(fig, target="plot-output")
+  // API CSV historique Yahoo Finance (données quotidiennes ajustées)
+  const url = `https://query1.finance.yahoo.com/v7/finance/download/${ticker}` +
+              `?period1=${unAnAvant}&period2=${now}&interval=1d&events=history&includeAdjustedClose=true`;
 
-    except Exception as e:
-        document.getElementById("status").innerHTML = "ERREUR"
-        document.getElementById("plot-output").innerHTML = f"Erreur technique : {str(e)}"
+  const response = await fetch(url);
+  const csv = await response.text();
 
-run_regression()
-</py-script>
+  const lignes = csv.trim().split("\n").slice(1); // on enlève l’en‑tête
+  const rows = lignes.map(l => l.split(",")).filter(r => r[1] !== "null" && r[4] !== "null");
+
+  // On prend les nbJours derniers en cas de plus d’un an
+  const data = rows.slice(-nbJours);
+
+  const dates = [];
+  const closes = [];
+
+  data.forEach(r => {
+    const dateStr = r[0];
+    const close = parseFloat(r[4]); // Close ajusté
+    if (!isNaN(close)) {
+      dates.push(dateStr);
+      closes.push(close);
+    }
+  });
+
+  return { dates, closes };
+}
+
+// ---------- CALCULS ET GRAPHIQUE ----------
+async function main() {
+  const { dates, closes } = await fetchAAPL();
+
+  if (dates.length === 0) {
+    alert("Impossible de charger les données AAPL.");
+    return;
+  }
+
+  // Index temporel 0..n-1
+  const xs = dates.map((_, i) => i);
+  const ys = closes;
+
+  // Rendements journaliers log
+  const returns = [];
+  for (let i = 1; i < ys.length; i++) {
+    returns.push(Math.log(ys[i] / ys[i - 1]));
+  }
+
+  const avgDailyReturn = mean(returns);
+  const stdDaily = stdDev(returns);
+  const annualVol = stdDaily * Math.sqrt(252);
+
+  const reg = linearRegression(xs, ys);
+  const a = reg.a;
+  const b = reg.b;
+  const se = reg.se;
+
+  // Préparation des séries pour le graphique
+  const regressionLine = xs.map((x, i) => ({ x: i, y: a * x + b }));
+
+  // Lignes de tendance ±1 et ±2 erreurs types (sur la valeur, pas sur le log)
+  const trendPlus1 = xs.map((x, i) => ({ x: i, y: a * x + b + se }));
+  const trendMinus1 = xs.map((x, i) => ({ x: i, y: a * x + b - se }));
+  const trendPlus2 = xs.map((x, i) => ({ x: i, y: a * x + b + 2 * se }));
+  const trendMinus2 = xs.map((x, i) => ({ x: i, y: a * x + b - 2 * se }));
+
+  // ---------- GRAPHIQUE CHART.JS ----------
+  const ctx = document.getElementById('chart').getContext('2d');
+
+  const chart = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: 'Cours de clôture',
+          data: ys.map((y, i) => ({ x: i, y })),
+          borderColor: 'rgba(0,0,0,0.0)',
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          pointRadius: 2,
+        },
+        {
+          label: 'Tendance (Régression)',
+          data: regressionLine,
+          showLine: true,
+          borderColor: 'black',
+          borderWidth: 2,
+          pointRadius: 0,
+        },
+        {
+          label: 'Tendance +1σ',
+          data: trendPlus1,
+          showLine: true,
+          borderColor: 'orange',
+          borderWidth: 1,
+          borderDash: [5, 5],
+          pointRadius: 0,
+        },
+        {
+          label: 'Tendance -1σ',
+          data: trendMinus1,
+          showLine: true,
+          borderColor: 'blue',
+          borderWidth: 1,
+          borderDash: [5, 5],
+          pointRadius: 0,
+        },
+        {
+          label: 'Tendance +2σ',
+          data: trendPlus2,
+          showLine: true,
+          borderColor: 'red',
+          borderWidth: 1,
+          borderDash: [5, 5],
+          pointRadius: 0,
+        },
+        {
+          label: 'Tendance -2σ',
+          data: trendMinus2,
+          showLine: true,
+          borderColor: 'green',
+          borderWidth: 1,
+          borderDash: [5, 5],
+          pointRadius: 0,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: {
+          type: 'linear',
+          position: 'bottom',
+          ticks: {
+            callback: function(value, index) {
+              const i = Math.round(value);
+              if (i >= 0 && i < dates.length && (i % 20 === 0 || i === dates.length - 1)) {
+                return dates[i];
+              }
+              return '';
+            }
+          },
+          title: {
+            display: true,
+            text: 'Jour de bourse'
+          }
+        },
+        y: {
+          title: {
+            display: true,
+            text: 'Prix de clôture (USD)'
+          }
+        }
+      },
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: {
+          callbacks: {
+            title: function(items) {
+              const i = items[0].parsed.x;
+              if (i >= 0 && i < dates.length) return dates[i];
+              return '';
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // ---------- TABLEAU DE STATISTIQUES ----------
+  const startDate = dates[0];
+  const endDate = dates[dates.length - 1];
+  const variationTotale = (ys[ys.length - 1] / ys[0]) - 1;
+  const variationJourMoy = avgDailyReturn;
+
+  const statsDiv = document.getElementById('stats');
+  statsDiv.innerHTML = `
+    <h3>Statistiques – ${ticker}</h3>
+    <table>
+      <tr><th>Ticker</th><td>${ticker}</td></tr>
+      <tr><th>Nombre de jours</th><td>${dates.length}</td></tr>
+      <tr><th>Date début (≈1 an)</th><td>${startDate}</td></tr>
+      <tr><th>Date fin (aujourd'hui)</th><td>${endDate}</td></tr>
+      <tr><th>Variation totale</th><td>${(variationTotale * 100).toFixed(2)} %</td></tr>
+      <tr><th>Variation/jour (moyenne, log)</th><td>${(variationJourMoy * 100).toFixed(4)} %</td></tr>
+      <tr><th>Écart type journalier (log)</th><td>${(stdDaily * 100).toFixed(4)} %</td></tr>
+      <tr><th>Volatilité annuelle (≈ √252)</th><td>${(annualVol * 100).toFixed(2)} %</td></tr>
+      <tr><th>Pente (a)</th><td>${a.toFixed(6)}</td></tr>
+      <tr><th>Ordonnée (b)</th><td>${b.toFixed(4)}</td></tr>
+      <tr><th>Erreur type de la régression</th><td>${se.toFixed(4)}</td></tr>
+    </table>
+  `;
+}
+
+main();
+</script>
 </body>
 </html>
+
+
+
+    
+    
+    
+      
+      
